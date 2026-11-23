@@ -2,27 +2,66 @@ name: 自动同步播放源
 
 on:
   schedule:
-    # 每天北京时间早上 8 点自动运行一次
-    - cron: '0 0 * * *'
-  workflow_dispatch: # 允许你在网页上随时手动点按钮运行
+    # 每天北京时间 08:17 检查一次，避开整点高峰
+    - cron: '17 0 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: sync-config-main
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: 拉取当前仓库
+      - name: 拉取 main 分支
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: 下载最新 LunaTV-config
         run: |
-          curl -fsSL "https://raw.githubusercontent.com/hafrey1/LunaTV-config/main/LunaTV-config.json" -o config.json
+          curl --fail --show-error --silent --location \
+            --retry 3 --retry-delay 5 --connect-timeout 20 --max-time 120 \
+            "https://raw.githubusercontent.com/hafrey1/LunaTV-config/main/LunaTV-config.json" \
+            --output "$RUNNER_TEMP/lunatv-config.json"
 
-      - name: 有更新则自动提交
+      - name: 校验配置并写入（失败时保留旧配置）
+        env:
+          DOWNLOADED_CONFIG: ${{ runner.temp }}/lunatv-config.json
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const config = JSON.parse(fs.readFileSync(process.env.DOWNLOADED_CONFIG, 'utf8'));
+          if (!config || typeof config !== 'object' || Array.isArray(config) ||
+              !config.api_site || typeof config.api_site !== 'object' ||
+              Array.isArray(config.api_site) || Object.keys(config.api_site).length === 0) {
+            throw new Error('配置缺少非空 api_site，停止同步');
+          }
+          for (const [key, site] of Object.entries(config.api_site)) {
+            if (!key || !site || typeof site.name !== 'string' || !site.name.trim() ||
+                typeof site.api !== 'string' || !/^https?:\/\//i.test(site.api)) {
+              throw new Error('无效的播放源配置：' + key);
+            }
+            new URL(site.api);
+          }
+          fs.writeFileSync('config.json', JSON.stringify(config, null, 2) + '\n');
+          console.log('已校验 ' + Object.keys(config.api_site).length + ' 个播放源');
+          NODE
+
+      - name: 仅在配置变化时提交并触发 Netlify
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add config.json
-          git diff --staged --quiet || (git commit -m "chore: 自动更新播放源" && git push)
+          if git diff --cached --quiet; then
+            echo "配置没有变化，无需重新部署" >> "$GITHUB_STEP_SUMMARY"
+          else
+            git commit -m "chore: 自动更新 LunaTV 播放源"
+            git push origin HEAD:main
+            echo "配置已更新并推送 main；Netlify 将自动构建部署。" >> "$GITHUB_STEP_SUMMARY"
+          fi
