@@ -4,6 +4,8 @@ import { getAdminVideoSourceKeys } from '@/lib/admin-video-sources';
 import { db } from '@/lib/db';
 import { normalizeApiBaseUrl } from '@/lib/url';
 
+import bundledConfig from '../../config.json';
+
 import { AdminConfig } from './admin.types';
 import { fetchConfigSubscription } from './config-subscription';
 import { setServerTmdbImageBaseUrl } from './tmdb-image-base';
@@ -458,10 +460,10 @@ export async function getConfig(): Promise<AdminConfig> {
   configInitPromise = (async () => {
     const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
 
-    // localStorage 模式下直接从环境变量初始化
+    // localStorage 模式下直接从内置配置或环境变量初始化
     if (storageType === 'localstorage') {
-      console.log('localStorage 模式：从环境变量初始化配置');
-      const adminConfig = await getInitConfig('');
+      console.log('localStorage 模式：从内置配置或环境变量初始化配置');
+      const adminConfig = await getInitConfig(JSON.stringify(bundledConfig));
       cachedConfig = configSelfCheck(adminConfig);
       configInitPromise = null;
       return cachedConfig;
