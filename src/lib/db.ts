@@ -1140,20 +1140,20 @@ export class DbManager {
 
   // ---------- 通用键值存储 ----------
   async getGlobalValue(key: string): Promise<string | null> {
-    if (typeof (this.storage as any).getGlobalValue === 'function') {
+    if (typeof (this.storage as any)?.getGlobalValue === 'function') {
       return (this.storage as any).getGlobalValue(key);
     }
     return null;
   }
 
   async setGlobalValue(key: string, value: string): Promise<void> {
-    if (typeof (this.storage as any).setGlobalValue === 'function') {
+    if (typeof (this.storage as any)?.setGlobalValue === 'function') {
       await (this.storage as any).setGlobalValue(key, value);
     }
   }
 
   async deleteGlobalValue(key: string): Promise<void> {
-    if (typeof (this.storage as any).deleteGlobalValue === 'function') {
+    if (typeof (this.storage as any)?.deleteGlobalValue === 'function') {
       await (this.storage as any).deleteGlobalValue(key);
     }
   }
